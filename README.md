@@ -1,22 +1,27 @@
 # rancher-charts
 
-Helm charty pro Rancher (e-INFRA CZ / CERIT-SC Kubernetes) — osobní instalace
-pro tým FN HK CTBT.
+Instalace **Codex CLI + CloudCLI** kontejneru na e-INFRA CZ Kubernetes
+(modely https://llm.ai.e-infra.cz, vlastní disk, běh bez roota).
 
-## codex-einfra
+## Jak nainstalovat (Rancher kubectl shell — bez lokálních nástrojů)
 
-Osobní izolovaný kontejner s Codex CLI + CloudCLI web UI, modely
-https://llm.ai.e-infra.cz. Vlastní disk 500 GB, běh bez roota (uid 1000),
-NetworkPolicy, basic-auth.
+1. Přihlas se na https://rancher.cloud.e-infra.cz
+2. Vpravo nahoře otevři **kubectl shell** (ikonka terminálu)
+3. Vlož celý obsah `codex-einfra-install.sh` a Enter
+4. Formulář se zeptá na: e-infra **API klíč** (skrytě), **heslo** (skrytě),
+   **jméno pro DNS**, velikost disku, volitelně Harbor pull secret
+5. Po 2–5 min: `https://codex-<jméno>.dyn.cloud.e-infra.cz`
 
-### Přidání do Rancheru (jednorázově provede každý uživatel s vlastním projektem)
+Klíče se ukládají POUZE do Kubernetes Secrets ve tvém namespace.
+Odinstalace: skript spusť s `--remove`.
 
-Rancher → Apps → Repositories → **Add** →
-- Name: `fnhk-charts`
-- Git Repo URL: `https://github.com/fnhkctbt/rancher-charts`
-- Branch: `master`
+## Alternativa: import YAML
 
-Pak Apps → Charts → **codex-einfra** → Install → vyplň formulář
-(API klíč, jméno instance, basic-auth heslo, velikost disku).
+`codex-einfra.yaml` lze importovat přes Rancher UI (Import YAML) — předem
+vyplň 3 označená místa (API klíč, htpasswd hash, hostname). Bez formuláře.
 
-Detaily: `charts/codex-einfra/v0.1.0/app-readme.md`
+## Helm chart (pro budoucí PR do CERIT-SC/rancher-apps)
+
+`charts/codex-einfra/v0.1.0/` — Rancher questions formulář
+(`type: password` pro API klíč), instalovatelný po přidání repa jako
+App Repository (cluster/project admin) nebo PR do rancher-apps.

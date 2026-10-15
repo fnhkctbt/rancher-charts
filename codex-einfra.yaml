@@ -1,0 +1,203 @@
+# ============================================================================
+# codex-einfra — osobní Codex + CloudCLI kontejner na e-INFRA CZ Kubernetes
+#
+# POUŽITÍ (dva způsoby):
+#   A) Rancher UI: přihlas se na https://rancher.cloud.e-infra.cz, vyber svůj
+#      namespace (Personal Project → default), menu vpravo nahoře ⋮ →
+#      „Import YAML“ → vlož CELÝ obsah tohoto souboru → Import.
+#   B) Terminál:  kubectl apply -f codex-einfra.yaml
+#      (vyžaduje kubeconfig z Rancheru v ~/.kube/config)
+#
+# PŘED APLIKACÍ VYPLŇ 3 VĚCI (označeno ⚠ VYPLN):
+#   1) ⚠ VYPLN API klíč z https://llm.ai.e-infra.cz (menu „API klíč“)
+#   2) ⚠ VYPLN basic-auth: vygeneruj hash svého hesla příkazem
+#         openssl passwd -apr1 'TVOJE-HESLO'
+#      a vlož výstup míko PLACEHOLDER-HASH níže (formát uzivatel:hash)
+#   3) ⚠ VYPLN hostname: vymysli si unikátní jméno (např. své přihlašovací
+#      jméno) a doplň ho na OBĚ místa „TVOJE-JMENO“ (2× HTTPRoute níže)
+#
+# Odinstalace: Rancher UI → smazat objekty (Deployment, PVC, ...), nebo
+#   kubectl delete -f codex-einfra.yaml   (smaže i data na PVC!)
+#
+# Po nasazení: počkej 2–5 min → otevři https://TVOJE-JMENO.dyn.cloud.e-infra.cz
+# → přihlas se basic-auth → v CloudCLI se zaregistruj → vyber e-infra model.
+# ============================================================================
+
+# ── ⚠ VYPLN 1: tvůj e-infra LLM API klíč ───────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codex-apikey
+  labels: { app: codex }
+type: Opaque
+stringData:
+  EINFRA_API_KEY: "SEM-VLOZ-API-KLIC"
+---
+# ── ⚠ VYPLN 2: basic-auth přihlášení k web UI ──────────────────────────────
+# vygeneruj hash:  openssl passwd -apr1 'TVOJE-HESLO'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codex-basic-auth-users
+  labels: { app: codex }
+type: Opaque
+stringData:
+  users: "uzivatel:PLACEHOLDER-HASH"
+---
+# ── volitelné: PULL SECRET (jen dokud je Harbor projekt privátní) ──────────
+# Harbor username = tvé přihlašovací jméno do hub.cerit.io,
+# password = „CLI secret“ z https://hub.cerit.io → User Profile.
+# Až bude projekt image veřejný (public), celý tento blok SMAZ
+# včetně řádku „imagePullSecrets“ v Deploymentu níže.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codex-harbor-pull
+  labels: { app: codex }
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: '{"auths":{"cerit.io":{"username":"HARBOR-USERNAME","password":"HARBOR-CLI-SECRET"}}}'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codex-data
+  labels: { app: codex }
+spec:
+  accessModes: [ ReadWriteOnce ]
+  storageClassName: nfs-csi          # alternativa s 30d zálohou: nfs-csi-backup
+  resources:
+    requests:
+      storage: 500Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codex
+  labels: { app: codex }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: codex }
+  template:
+    metadata:
+      labels: { app: codex }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      imagePullSecrets:
+        - name: codex-harbor-pull     # smaž tento řádek, až bude projekt public
+      containers:
+        - name: codex
+          image: cerit.io/ctbt/codex-einfra:1.0.5
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef: { name: codex-apikey }
+          env:
+            - { name: SERVER_PORT, value: "3001" }
+            - { name: HOST, value: "0.0.0.0" }
+            - { name: EINFRA_MODEL, value: "glm-5.3" }   # výchozí model
+            - { name: ADMIN_USER, value: "codex" }
+            - { name: ADMIN_PASSWORD, value: "" }
+            - { name: ALLOW_REGISTRATION, value: "true" }
+            - { name: DATABASE_PATH, value: "/data/db/auth.db" }
+            - { name: CWD, value: "/workspace" }
+            - { name: SESSION_IDLE_SEC, value: "7200" }
+          ports:
+            - containerPort: 3001
+          resources:
+            requests: { cpu: "2", memory: 8Gi }
+            limits: { cpu: "8", memory: 32Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ "ALL" ] }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: codex-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: codex-svc
+  labels: { app: codex }
+spec:
+  type: ClusterIP
+  selector: { app: codex }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3001
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: codex-basic-auth
+spec:
+  basicAuth:
+    secret: codex-basic-auth-users
+---
+# ── ⚠ VYPLN 3a: hostname (HTTPS, hlavní adresa) ────────────────────────────
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: codex-websecure
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: kube-system
+      sectionName: websecure
+  hostnames:
+    - codex-TVOJE-JMENO.dyn.cloud.e-infra.cz
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: codex-basic-auth
+      backendRefs:
+        - name: codex-svc
+          port: 80
+---
+# ── ⚠ VYPLN 3b: stejný hostname (HTTP → HTTPS redirect) ────────────────────
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: codex-web-redirect
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: kube-system
+      sectionName: web
+  hostnames:
+    - codex-TVOJE-JMENO.dyn.cloud.e-infra.cz
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: codex-netpol
+spec:
+  podSelector:
+    matchLabels: { app: codex }
+  policyTypes: [ Ingress ]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - protocol: TCP
+          port: 3001
