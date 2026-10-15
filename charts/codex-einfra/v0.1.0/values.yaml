@@ -1,0 +1,34 @@
+# Defaults — vše klíčové se vyplňuje formulářem v Rancher UI (questions.yml).
+
+image: cerit.io/ctbt/codex-einfra:1.0.5
+
+einfra:
+  # API klíč z https://llm.ai.e-infra.cz (povinné, formulář ho maskuje)
+  apiKey: ""
+  # Výchozí model (seznam modelů se v UI průběžně synchronizuje z e-infra)
+  defaultModel: "glm-5.3"
+
+# Přihlášení k web UI (basic-auth před vlastní registrací v CloudCLI)
+basicAuth:
+  username: ""
+  password: ""
+
+# Krátký unikátní identifikátor, např. "novak" → https://codex-novak.dyn.cloud.e-infra.cz
+hostname: ""
+
+storage:
+  size: 500Gi
+  className: nfs-csi
+
+resources:
+  requests:
+    cpu: "2"
+    memory: 8Gi
+  limits:
+    cpu: "8"
+    memory: 32Gi
+
+# Jen dokud je Harbor projekt image privátní; po zveřejnění nechat prázdné.
+harborPull:
+  username: ""
+  password: ""

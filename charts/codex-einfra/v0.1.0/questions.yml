@@ -1,0 +1,61 @@
+categories:
+  - AI
+  - Codex
+
+rancher_min_version: 2.3.0
+
+questions:
+  - variable: einfra.apiKey
+    type: password
+    label: e-infra API klíč
+    description: "API klíč ze https://llm.ai.e-infra.cz (levé menu: API klíč). Klíč se uloží jen jako Secret ve tvém namespace."
+    group: "e-infra LLM"
+    required: true
+  - variable: einfra.defaultModel
+    type: enum
+    label: Výchozí model
+    description: "Výchozí model; kompletní živý seznam modelů se synchronizuje v aplikaci a jde v ní kdykoli přepnout."
+    group: "e-infra LLM"
+    default: "glm-5.3"
+    options:
+      - "glm-5.3"
+      - "qwen3.8-flash-next"
+      - "gpt-oss-120b"
+  - variable: hostname
+    type: string
+    label: Krátké jméno instance
+    description: "Unikátní, např. novak → adresa https://codex-novak.dyn.cloud.e-infra.cz"
+    group: "Přístup"
+    required: true
+  - variable: basicAuth.username
+    type: string
+    label: Přihlašovací jméno (basic-auth)
+    group: "Přístup"
+    required: true
+  - variable: basicAuth.password
+    type: password
+    label: Heslo (basic-auth)
+    description: "První bariéra před webovým UI. Uvnitř se pak ještě registruješ v CloudCLI."
+    group: "Přístup"
+    required: true
+  - variable: storage.size
+    type: string
+    label: Velikost disku
+    group: "Zdroje"
+    default: "500Gi"
+    required: true
+  - variable: storage.className
+    type: storageclass
+    label: Storage class
+    group: "Zdroje"
+    default: "nfs-csi"
+  - variable: harborPull.username
+    type: string
+    label: Harbor username (volitelné)
+    description: "Vyplň JEN dokud je image v privátním projektu (hub.cerit.io přihlašovací jméno). Jinak nech prázdné."
+    group: "Image pull (pokud je projekt privátní)"
+  - variable: harborPull.password
+    type: password
+    label: Harbor CLI secret (volitelné)
+    description: "https://hub.cerit.io → User Profile → CLI secret. Použije se jen pro stažení image."
+    group: "Image pull (pokud je projekt privátní)"

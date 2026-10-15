@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-codex
+  labels:
+    {{- include "codex-einfra.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "codex-einfra.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "codex-einfra.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.harborPull.username }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-harbor-pull
+      {{- end }}
+      containers:
+        - name: codex
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-apikey
+          env:
+            - name: SERVER_PORT
+              value: "3001"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: EINFRA_MODEL
+              value: {{ .Values.einfra.defaultModel | quote }}
+            - name: ADMIN_USER
+              value: codex
+            - name: ADMIN_PASSWORD
+              value: ""
+            - name: ALLOW_REGISTRATION
+              value: "true"
+            - name: DATABASE_PATH
+              value: /data/db/auth.db
+            - name: CWD
+              value: /workspace
+            - name: SESSION_IDLE_SEC
+              value: "7200"
+          ports:
+            - containerPort: 3001
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data
